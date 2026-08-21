@@ -10,6 +10,8 @@
 package flow
 
 import (
+	"sort"
+
 	"task142-atcconflict/internal/airspace"
 	"task142-atcconflict/internal/model"
 	"task142-atcconflict/internal/trajectory"
@@ -60,20 +62,30 @@ func Occupancy(air *airspace.Airspace, positions []model.Position) []model.Secto
 
 // MilesInTrailCheck evaluates whether a sequence of flights on the same fix
 // respects the miles-in-trail spacing. It returns the violating pairs (lead,
-// trail) where the gap is below required nm. The caller provides the ordered
-// list of (plan, distance-to-fix) for flights approaching the same fix.
+// trail) where the gap is below required nm. The caller provides each flight's
+// distance to the fix (via airspace.LegDistance or HaversineNM).
 //
-// In practice the service computes the distance of each flight to the fix
-// (via airspace.LegDistance or HaversineNM) and passes them sorted descending
-// (farthest first = leader).
+// Radar snapshots are occasionally delivered out of order, so the entries are
+// sorted here by distance-to-fix descending (farthest first = leader) before the
+// adjacent pairs are formed. This guarantees the real leader/trailer pairing
+// regardless of the order the snapshot arrived in, and avoids mismatching a
+// leader with the wrong trailer (which would either swallow a true spacing
+// breach or emit a false one). The caller's slice is not mutated.
 func MilesInTrailCheck(spacing []SpacingEntry, requiredNM int) []Violation {
 	if len(spacing) < 2 || requiredNM <= 0 {
 		return nil
 	}
+	// Sort by distance-to-fix descending so adjacent entries are the true
+	// leader/trailer pairs. Work on a copy so the caller's slice is untouched.
+	ordered := make([]SpacingEntry, len(spacing))
+	copy(ordered, spacing)
+	sort.Slice(ordered, func(i, j int) bool {
+		return ordered[i].DistanceToFix > ordered[j].DistanceToFix
+	})
 	var out []Violation
-	for i := 0; i < len(spacing)-1; i++ {
-		lead := spacing[i]
-		trail := spacing[i+1]
+	for i := 0; i < len(ordered)-1; i++ {
+		lead := ordered[i]
+		trail := ordered[i+1]
 		// lead is farther; trail is closer. Gap = lead.Dist - trail.Dist.
 		gap := lead.DistanceToFix - trail.DistanceToFix
 		if gap < float64(requiredNM) {

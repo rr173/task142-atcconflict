@@ -62,3 +62,37 @@ func TestMilesInTrailCheck(t *testing.T) {
 		t.Errorf("single flight should not violate, got %d", len(v2))
 	}
 }
+
+func TestMilesInTrailCheckOutOfOrder(t *testing.T) {
+	// Same three flights as TestMilesInTrailCheck, but the radar batch arrives
+	// shuffled. The true leader/trailer pairs (A/B and B/C) must be recovered
+	// rather than pairing A/C and C/B from the raw snapshot order.
+	shuffled := []SpacingEntry{
+		{PlanID: "A", DistanceToFix: 120},
+		{PlanID: "C", DistanceToFix: 100},
+		{PlanID: "B", DistanceToFix: 110},
+	}
+	v := MilesInTrailCheck(shuffled, 15)
+	if len(v) != 2 {
+		t.Fatalf("want 2 violations, got %d", len(v))
+	}
+	if v[0].Leader != "A" || v[0].Trailer != "B" {
+		t.Errorf("first violation = %s/%s, want A/B", v[0].Leader, v[0].Trailer)
+	}
+	if v[1].Leader != "B" || v[1].Trailer != "C" {
+		t.Errorf("second violation = %s/%s, want B/C", v[1].Leader, v[1].Trailer)
+	}
+	// Caller's slice must be left untouched.
+	if shuffled[1].PlanID != "C" || shuffled[2].PlanID != "B" {
+		t.Errorf("input slice was mutated: %+v", shuffled)
+	}
+	// Two flights tied at the same distance: order is stable but both pairs
+	// must be evaluated (a 0nm gap violates any positive requiredNM).
+	tied := []SpacingEntry{
+		{PlanID: "X", DistanceToFix: 50},
+		{PlanID: "Y", DistanceToFix: 50},
+	}
+	if v := MilesInTrailCheck(tied, 10); len(v) != 1 {
+		t.Errorf("tied flights: want 1 violation, got %d", len(v))
+	}
+}
