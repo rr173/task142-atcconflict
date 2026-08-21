@@ -27,6 +27,10 @@ type Airspace struct {
 	// segmentKey indexes every declared airway leg by "fromWaypoint->toWaypoint"
 	// so route validation can ask "is there an airway from A to B?" in O(1).
 	segmentKey map[legKey]string
+	// airwayLegs records, per airway id, the segment keys that airway contributed
+	// to segmentKey. It lets a replacement withdraw the airway's previously
+	// declared legs so the route index only reflects the latest declaration.
+	airwayLegs map[string][]legKey
 }
 
 type legKey struct {
@@ -40,6 +44,7 @@ func New() *Airspace {
 		waypoints:  map[string]*model.Waypoint{},
 		airways:    map[string]*model.Airway{},
 		segmentKey: map[legKey]string{},
+		airwayLegs: map[string][]legKey{},
 	}
 }
 
@@ -49,26 +54,50 @@ func (a *Airspace) AddSector(s *model.Sector) { a.sectors[s.ID] = s }
 // AddWaypoint registers (or replaces) a waypoint.
 func (a *Airspace) AddWaypoint(w *model.Waypoint) { a.waypoints[w.ID] = w }
 
-// AddAirway registers an airway and indexes its legs both ways (subject to the
-// airway's declared direction).
+// AddAirway registers (or replaces) an airway and indexes its legs both ways
+// (subject to the airway's declared direction). Replacing an airway withdraws
+// the legs the previous declaration contributed to segmentKey, so the route
+// index only ever reflects the airway's latest declared segments — otherwise a
+// revoked leg would remain clearence-legal and a flight could be routed along a
+// path that is no longer in service.
 func (a *Airspace) AddAirway(aw *model.Airway) error {
 	if len(aw.WaypointIDs) < 2 {
 		return fmt.Errorf("airway %s has fewer than 2 waypoints", aw.Code)
 	}
+	a.withdrawAirwayLegs(aw.ID)
 	a.airways[aw.ID] = aw
+	var legs []legKey
+	addLeg := func(k legKey) {
+		a.segmentKey[k] = aw.ID
+		legs = append(legs, k)
+	}
 	for i := 0; i < len(aw.WaypointIDs)-1; i++ {
 		from, to := aw.WaypointIDs[i], aw.WaypointIDs[i+1]
 		switch aw.Direction {
 		case model.AirwayForward:
-			a.segmentKey[legKey{from, to}] = aw.ID
+			addLeg(legKey{from, to})
 		case model.AirwayReverse:
-			a.segmentKey[legKey{to, from}] = aw.ID
+			addLeg(legKey{to, from})
 		case model.AirwayBoth, "":
-			a.segmentKey[legKey{from, to}] = aw.ID
-			a.segmentKey[legKey{to, from}] = aw.ID
+			addLeg(legKey{from, to})
+			addLeg(legKey{to, from})
 		}
 	}
+	a.airwayLegs[aw.ID] = legs
 	return nil
+}
+
+// withdrawAirwayLegs removes every leg the airway previously indexed under id,
+// but only when this airway was the one that declared each leg. Two airways may
+// legally cover the same leg (e.g. overlapping routes); a replacement of one
+// must not void a leg still covered by another.
+func (a *Airspace) withdrawAirwayLegs(id string) {
+	for _, k := range a.airwayLegs[id] {
+		if a.segmentKey[k] == id {
+			delete(a.segmentKey, k)
+		}
+	}
+	delete(a.airwayLegs, id)
 }
 
 // Sector returns the sector by id, or nil.
