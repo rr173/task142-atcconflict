@@ -7,6 +7,7 @@ package airspace
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"task142-atcconflict/internal/model"
 	"task142-atcconflict/internal/trajectory"
@@ -74,8 +75,20 @@ func (a *Airspace) AddAirway(aw *model.Airway) error {
 // Sector returns the sector by id, or nil.
 func (a *Airspace) Sector(id string) *model.Sector { return a.sectors[id] }
 
-// SectorsList returns all declared sectors in a stable order (by id).
-func (a *Airspace) SectorsList() map[string]*model.Sector { return a.sectors }
+// SectorsList returns all declared sectors in a stable, predictable order
+// (sorted by sector id). Callers that range over this list to build ordered
+// output — such as the sector-load list — depend on this stability so the same
+// airspace snapshot always produces the same row order. Returning the backing
+// map directly would expose Go's randomized map iteration order, making the
+// output shuffle across runs even with identical input.
+func (a *Airspace) SectorsList() []*model.Sector {
+	out := make([]*model.Sector, 0, len(a.sectors))
+	for _, s := range a.sectors {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
 
 // Waypoint returns the waypoint by id, or nil.
 func (a *Airspace) Waypoint(id string) *model.Waypoint { return a.waypoints[id] }
@@ -92,11 +105,13 @@ func (a *Airspace) WaypointByCode(code string) *model.Waypoint {
 
 // SectorForPosition returns the sector whose volume contains (lat,lon,fl), or
 // "" if none. If multiple sectors overlap (a misconfiguration), the first in
-// map iteration order wins; callers should declare non-overlapping sectors.
+// sorted-by-id order wins; callers should declare non-overlapping sectors. The
+// iteration is deterministic so the same airspace + position always resolves to
+// the same sector, which keeps the occupancy list stable.
 func (a *Airspace) SectorForPosition(p trajectory.LatLon, fl int) string {
-	for id, s := range a.sectors {
+	for _, s := range a.SectorsList() {
 		if InsideSector(s, p, fl) {
-			return id
+			return s.ID
 		}
 	}
 	return ""

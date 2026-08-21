@@ -16,10 +16,13 @@ import (
 )
 
 // Occupancy computes the per-sector load from a set of active flight positions.
-// It returns one SectorOccupancy per declared sector, ordered by sector id.
-// A flight is counted in a sector when its position is inside the sector volume.
+// It returns one SectorOccupancy per declared sector, in the stable order
+// produced by airspace.SectorsList (sorted by sector id), so the same input
+// always yields the same row order. A flight is counted in a sector when its
+// position is inside the sector volume.
 func Occupancy(air *airspace.Airspace, positions []model.Position) []model.SectorOccupancy {
-	out := make([]model.SectorOccupancy, 0, len(air.SectorsList()))
+	sectors := air.SectorsList()
+	out := make([]model.SectorOccupancy, 0, len(sectors))
 	// Collect per-sector plan ids.
 	type acc struct {
 		plans []string
@@ -36,7 +39,8 @@ func Occupancy(air *airspace.Airspace, positions []model.Position) []model.Secto
 		}
 		bySector[sid].plans = append(bySector[sid].plans, p.PlanID)
 	}
-	for sid, s := range air.SectorsList() {
+	for _, s := range sectors {
+		sid := s.ID
 		a := bySector[sid]
 		count := 0
 		var plans []string
