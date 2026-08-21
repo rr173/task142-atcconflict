@@ -13,9 +13,12 @@
 //
 // (Satisfying either minimum is safe; only losing both at the same instant is a
 // conflict.) The vertical minimum is RVSM-aware: 1000ft when both aircraft are
-// at or below FL410, else 2000ft (non-RVSM above the band). The earliest
-// breaching instant and the closest lateral/vertical approach within the
-// breach are recorded, and the conflict is classified by relative geometry
+// at or below FL410, else 2000ft (non-RVSM above the band). Because aircraft
+// climb and descend across the FL410 band within the lookahead window, the
+// vertical minimum is recomputed at each sampled instant from the projected
+// flight levels at that instant (not held fixed at the starting FLs). The
+// earliest breaching instant and the closest lateral/vertical approach within
+// the breach are recorded, and the conflict is classified by relative geometry
 // (same-direction, overtaking, opposite, crossing, vertical-only).
 package separation
 
@@ -85,7 +88,12 @@ func (p *Prober) Detect(now time.Time, tracks []TrackState) []model.Conflict {
 
 // detectPair probes one pair over the lookahead window.
 func (p *Prober) detectPair(now time.Time, a, b TrackState) *model.Conflict {
-	vmin := VerticalMinFt(a.FL, b.FL)
+	// NOTE: the RVSM vertical minimum depends on the aircrafts' flight levels and
+	// therefore changes as they climb/descend across the FL410 band boundary over
+	// the lookahead window. It must be recomputed for each sampled instant from
+	// the projected FLs at that instant; using the starting FLs (as a fixed vmin)
+	// would apply the wrong standard for later samples and miss conflicts that
+	// emerge once one aircraft crosses the RVSM ceiling.
 	step := p.StepSec
 	if step <= 0 {
 		step = DefaultStepSec
@@ -105,6 +113,7 @@ func (p *Prober) detectPair(now time.Time, a, b TrackState) *model.Conflict {
 		pb, flb := trajectory.ProjectFromTrack(b.Position, b.Heading, b.Groundspeed, b.FL, b.VerticalRate, t)
 		lat := trajectory.HaversineNM(pa, pb)
 		vert := absFL(fla, flb)
+		vmin := VerticalMinFt(fla, flb) // recompute per instant from projected FLs
 		if lat < LateralMinNM && vert < float64(vmin) {
 			if firstBreach < 0 {
 				firstBreach = t
@@ -126,7 +135,7 @@ func (p *Prober) detectPair(now time.Time, a, b TrackState) *model.Conflict {
 		minLat = LateralMinNM
 	}
 	if minVert < 0 {
-		minVert = float64(vmin)
+		minVert = float64(VerticalMinFt(a.FL, b.FL))
 	}
 	return &model.Conflict{
 		PlanA:         a.PlanID,

@@ -102,3 +102,40 @@ func TestClassifyOvertaking(t *testing.T) {
 		t.Errorf("classify = %v, want OVERTAKING", c)
 	}
 }
+
+func TestDetectAcrossRVSMBoundary(t *testing.T) {
+	// Regression: two aircraft climbing across the RVSM ceiling (FL410) within
+	// the lookahead window. Both START at or below FL410, so the starting
+	// vertical minimum is the RVSM 1000ft. They maintain ~1500ft of vertical
+	// separation throughout (safe under the 1000ft RVSM standard but a loss once
+	// both are above FL410 and the non-RVSM 2000ft standard applies). Lateral is
+	// held under 5nm the whole time (parallel, same-speed tracks).
+	//
+	// Under the buggy behavior (vmin fixed at the starting FLs => 1000ft), the
+	// pair reads as safe at every sample (1500 >= 1000) and the conflict is
+	// missed. With vmin recomputed per instant from the projected FLs, once b
+	// climbs above FL410 the minimum becomes 2000ft and 1500 < 2000 => conflict.
+	//
+	// a: FL390 climbing 1000 fpm; b: FL405 climbing 1000 fpm => constant 1500ft.
+	// b crosses FL410 at t=30s; from then on at least one aircraft is above FL410.
+	p := New()
+	now, _ := time.Parse(time.RFC3339, "2026-01-10T09:00:00Z")
+	tracks := []TrackState{
+		{PlanID: "A", Position: trajectory.LatLon{Lat: 0, Lon: 0}, FL: 390, Heading: 90, Groundspeed: 480, VerticalRate: 1000},
+		{PlanID: "B", Position: trajectory.LatLon{Lat: 0.03, Lon: 0}, FL: 405, Heading: 90, Groundspeed: 480, VerticalRate: 1000},
+	}
+	cs := p.Detect(now, tracks)
+	if len(cs) != 1 {
+		t.Fatalf("RVSM-boundary climb pair should conflict (1500ft < 2000ft above FL410), got %d conflicts: %+v", len(cs), cs)
+	}
+	if cs[0].MinVerticalFT >= 2000 {
+		t.Errorf("min vertical = %v, want < 2000 (non-RVSM minimum breached)", cs[0].MinVerticalFT)
+	}
+
+	// Sanity: with 2500ft separation the pair is always safe (>= 1000 below
+	// FL410, >= 2000 above). Catches an over-broad fix that flags every climb.
+	tracks[1].FL = 420 // FL390 vs FL420 => 3000ft
+	if cs := p.Detect(now, tracks); len(cs) != 0 {
+		t.Fatalf("3000ft-separated pair across the RVSM boundary should be safe, got %d conflicts: %+v", len(cs), cs)
+	}
+}
