@@ -176,6 +176,14 @@ func PositionAtTime(r PlanRoute, elapsedSec float64) (LatLon, int, int) {
 			if legSec > 0 {
 				f = rem / legSec
 			}
+			// Clamp to [0,1]. A negative f means the query time is before the
+			// start of the route (e.g. a scheduled-but-not-yet-airborne flight
+			// queried before EOBT): the aircraft has not departed, so it stays
+			// parked at the first waypoint rather than being projected
+			// backwards off the departure point.
+			if f < 0 {
+				f = 0
+			}
 			if f > 1 {
 				f = 1
 			}

@@ -97,6 +97,24 @@ func TestPositionAtTime(t *testing.T) {
 	if !approxEq(p.Lon, 1, 1e-6) {
 		t.Errorf("clamp lon = %v, want 1", p.Lon)
 	}
+	// Before departure (negative elapsed): the flight has not taken off yet,
+	// so it must stay parked at the first waypoint rather than being projected
+	// backwards off the departure point.
+	p, fl, leg = PositionAtTime(r, -600)
+	if !approxEq(p.Lat, 0, 1e-9) || !approxEq(p.Lon, 0, 1e-9) {
+		t.Errorf("pre-departure position = %+v, want origin (first waypoint)", p)
+	}
+	if fl != 350 {
+		t.Errorf("pre-departure FL = %d, want 350", fl)
+	}
+	if leg != 0 {
+		t.Errorf("pre-departure leg = %d, want 0", leg)
+	}
+	// Elapsed of exactly 0 also stays at the first waypoint.
+	p, _, _ = PositionAtTime(r, 0)
+	if !approxEq(p.Lon, 0, 1e-9) {
+		t.Errorf("t=0 position = %+v, want origin", p)
+	}
 }
 
 func TestDirectLegDistanceNM(t *testing.T) {
