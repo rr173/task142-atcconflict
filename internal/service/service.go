@@ -72,6 +72,13 @@ func (s *Service) Move(ctx context.Context, id string, to model.FlightState) (*m
 		return nil, err
 	}
 	_ = s.st.Event(ctx, p.UpdatedAt, "flight."+string(to), p.ID, p)
+	// A state change can take a flight out of the active set (e.g. terminated or
+	// suspended); recompute the conflict picture so stale conflicts involving a
+	// now-inactive flight are dropped immediately rather than lingering on the
+	// controller display until the next track report.
+	if err = s.refresh(ctx); err != nil {
+		return nil, err
+	}
 	return p, nil
 }
 func (s *Service) Report(ctx context.Context, r *model.TrackReport) (*model.Position, error) {
