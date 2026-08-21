@@ -36,9 +36,10 @@ const DefaultLookaheadSec = 900.0 // 15 minutes
 const DefaultStepSec = 12.0
 
 // VerticalMinFt returns the vertical separation minimum for two flight levels,
-// RVSM-aware: 1000ft when both are at or below FL410, otherwise 2000ft.
+// RVSM-aware: 1000ft when both are at or below FL410, otherwise 2000ft. FL410 is
+// the top of the RVSM band (inclusive); the non-RVSM region begins above it.
 func VerticalMinFt(flA, flB int) int {
-	if flA < 410 && flB < 410 {
+	if flA <= 410 && flB <= 410 {
 		return 1000
 	}
 	return 2000

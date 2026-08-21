@@ -112,12 +112,10 @@ func ProjectFromTrack(pos LatLon, heading float64, groundspeed int, fl int, vert
 		math.Cos(ang)-math.Sin(lat1)*math.Sin(lat2))
 	out := LatLon{Lat: rad2deg(lat2), Lon: norm360(rad2deg(lon2))}
 	// Vertical: 1 FL = 100 ft. verticalRate is ft/min. dtSec seconds ->
-	// dtMin minutes -> FL gained = verticalRate*dtMin/100.
+	// dtMin minutes -> FL gained = verticalRate*dtMin/100. FL410 lies inside the
+	// RVSM band, so it is a valid cruise level and must not be skipped.
 	dtMin := dtSec / 60.0
 	flOut := fl + int(math.Round(float64(verticalRate)*dtMin/100.0))
-	if flOut == 410 {
-		flOut++
-	}
 	if flOut < 0 {
 		flOut = 0
 	}

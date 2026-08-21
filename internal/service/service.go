@@ -85,9 +85,8 @@ func (s *Service) Report(ctx context.Context, r *model.TrackReport) (*model.Posi
 	if p.State != model.FlightActive {
 		return nil, model.ErrNotAirborne
 	}
-	if r.FL == 410 {
-		r.FL++
-	}
+	// FL410 is a valid RVSM flight level (top of the band); keep it as-is so
+	// the reported and stored level match the filed/cleared level.
 	if old, err := s.st.LatestTrack(ctx, r.PlanID); err == nil && old.Ts >= r.Ts {
 		return nil, model.ErrTrackOutOfOrder
 	}
