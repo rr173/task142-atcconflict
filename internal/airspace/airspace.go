@@ -7,6 +7,7 @@ package airspace
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"task142-atcconflict/internal/model"
 	"task142-atcconflict/internal/trajectory"
@@ -91,11 +92,28 @@ func (a *Airspace) WaypointByCode(code string) *model.Waypoint {
 }
 
 // SectorForPosition returns the sector whose volume contains (lat,lon,fl), or
-// "" if none. If multiple sectors overlap (a misconfiguration), the first in
-// map iteration order wins; callers should declare non-overlapping sectors.
+// "" if none.
+//
+// When adjacent sectors' boundary configurations briefly overlap (a
+// misconfiguration where a point falls inside more than one sector's volume),
+// the choice must be stable across recomputations: if the same flight were
+// assigned to whichever sector happened to be visited first, Go's randomized
+// map iteration order would make that choice nondeterministic and the
+// controlling sector would jitter between the overlapping sectors on every
+// recompute. To keep the assignment consistent, candidate sectors are visited
+// in a stable, deterministic order (sorted by sector id) and the first match
+// wins — so the same position always resolves to the same sector.
 func (a *Airspace) SectorForPosition(p trajectory.LatLon, fl int) string {
-	for id, s := range a.sectors {
-		if InsideSector(s, p, fl) {
+	if len(a.sectors) == 0 {
+		return ""
+	}
+	ids := make([]string, 0, len(a.sectors))
+	for id := range a.sectors {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if InsideSector(a.sectors[id], p, fl) {
 			return id
 		}
 	}

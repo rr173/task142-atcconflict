@@ -70,6 +70,33 @@ func TestSectorForPosition(t *testing.T) {
 	}
 }
 
+// TestSectorForPositionOverlappingStable covers the responsibility-sector jitter
+// bug: when adjacent sectors' boundary configurations briefly overlap, a point
+// can fall inside more than one sector's volume. The assignment must be stable
+// and consistent across recomputations — the same position must always resolve
+// to the same sector regardless of Go's randomized map iteration order, and the
+// pick must be deterministic (lexically smallest sector id wins).
+func TestSectorForPositionOverlappingStable(t *testing.T) {
+	// Two sectors whose polygons overlap in the [5,15]x[5,15] region. A point in
+	// the overlap (10,10) is inside both volumes.
+	a := New()
+	a.AddSector(sec("B", 100, 400, 5, []model.LatLon{{Lat: 0, Lon: 0}, {Lat: 0, Lon: 15}, {Lat: 15, Lon: 15}, {Lat: 15, Lon: 0}}))
+	a.AddSector(sec("A", 100, 400, 5, []model.LatLon{{Lat: 5, Lon: 5}, {Lat: 5, Lon: 20}, {Lat: 20, Lon: 20}, {Lat: 20, Lon: 5}}))
+	p := trajectory.LatLon{Lat: 10, Lon: 10}
+	const want = "A" // lexically smallest of the overlapping sectors
+	first := a.SectorForPosition(p, 300)
+	if first != want {
+		t.Fatalf("overlap resolved to %q, want %q", first, want)
+	}
+	// The same point must resolve identically on every recomputation; map
+	// iteration order is randomized, so this would jitter before the fix.
+	for i := 0; i < 200; i++ {
+		if got := a.SectorForPosition(p, 300); got != first {
+			t.Fatalf("overlap assignment not stable: iteration %d gave %q, want %q", i, got, first)
+		}
+	}
+}
+
 func TestValidateRoute(t *testing.T) {
 	a := New()
 	a.AddWaypoint(wp("A", "AAA", 0, 0))
