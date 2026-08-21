@@ -286,18 +286,23 @@ var (
 	ErrNotFound = errors.New("atc: not found")
 
 	// State-machine errors.
-	ErrInvalidState      = errors.New("invalid flight state transition")
-	ErrCallsignTaken     = errors.New("callsign already in use by an active flight")
-	ErrRouteInvalid      = errors.New("route is not connected by declared airways or within direct-leg distance")
-	ErrTrackOutOfOrder   = errors.New("track report timestamp is not strictly increasing")
+	ErrInvalidState       = errors.New("invalid flight state transition")
+	ErrCallsignTaken      = errors.New("callsign already in use by an active flight")
+	ErrRouteInvalid       = errors.New("route is not connected by declared airways or within direct-leg distance")
+	ErrTrackOutOfOrder    = errors.New("track report timestamp is not strictly increasing")
 	ErrHandoffPending     = errors.New("a handoff is already pending for this flight")
 	ErrHandoffNotAdjacent = errors.New("receiving sector is not adjacent or flight is not entering it")
-	ErrSpeedEnvelope      = errors.New("mach is outside the aircraft type envelope")
-	ErrFLRange            = errors.New("flight level is out of range or above the aircraft ceiling")
-	ErrNotAirborne        = errors.New("flight is not airborne")
-	ErrAlreadyAirborne    = errors.New("flight is already airborne")
-	ErrSuspended          = errors.New("flight is suspended")
-	ErrConflictExists     = errors.New("flight cannot be cleared into a known conflict")
+	// ErrHandoffNotController is returned when the sector initiating a handoff
+	// is not the flight's current controlling sector. Only the controlling
+	// sector may transfer an active flight; otherwise the receiving sector is
+	// handed an untrustworthy request from a sector that never had control.
+	ErrHandoffNotController = errors.New("only the current controlling sector may initiate a handoff")
+	ErrSpeedEnvelope        = errors.New("mach is outside the aircraft type envelope")
+	ErrFLRange              = errors.New("flight level is out of range or above the aircraft ceiling")
+	ErrNotAirborne          = errors.New("flight is not airborne")
+	ErrAlreadyAirborne      = errors.New("flight is already airborne")
+	ErrSuspended            = errors.New("flight is suspended")
+	ErrConflictExists       = errors.New("flight cannot be cleared into a known conflict")
 )
 
 // IsBusinessError reports whether err is one of the domain business errors that
@@ -311,6 +316,7 @@ func IsBusinessError(err error) bool {
 		errors.Is(err, ErrTrackOutOfOrder),
 		errors.Is(err, ErrHandoffPending),
 		errors.Is(err, ErrHandoffNotAdjacent),
+		errors.Is(err, ErrHandoffNotController),
 		errors.Is(err, ErrSpeedEnvelope),
 		errors.Is(err, ErrFLRange),
 		errors.Is(err, ErrNotAirborne),

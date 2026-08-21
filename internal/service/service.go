@@ -136,7 +136,7 @@ func (s *Service) InitiateHandoff(ctx context.Context, plan, from, to string) (*
 			return nil, model.ErrHandoffPending
 		}
 	}
-	h, err := flight.Initiate(plan, from, to, s.now())
+	h, err := flight.Initiate(plan, from, to, p.ControllingSector, s.now())
 	if err != nil {
 		return nil, err
 	}
