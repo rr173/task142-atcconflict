@@ -1,0 +1,12 @@
+# Build artifacts / cache
+vendor/
+node_modules/
+dist/
+build/
+*.db
+*.db-*
+atcconflict
+
+# Test/cache artifacts
+*.out
+*.test
