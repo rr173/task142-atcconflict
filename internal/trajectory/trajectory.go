@@ -39,6 +39,24 @@ func norm360(h float64) float64 {
 	return h
 }
 
+// normLon normalizes a longitude to the global geographic convention
+// [-180, +180] (negative = western hemisphere, positive = eastern). This keeps
+// a predicted position in the correct hemisphere after crossing the
+// International Date Line: e.g. flying east from +179.9° to a continuous
+// +180.3° is represented as -179.7°, not 180.3°. Sector polygons and map
+// coordinates are stored in [-180, +180], so any longitude produced here must
+// share that convention or the subsequent point-in-polygon boundary test and
+// the displayed map position will disagree.
+func normLon(lon float64) float64 {
+	lon = math.Mod(lon, 360)
+	if lon > 180 {
+		lon -= 360
+	} else if lon < -180 {
+		lon += 360
+	}
+	return lon
+}
+
 // HaversineNM returns the great-circle distance in nautical miles between two
 // lat/lon points.
 func HaversineNM(a, b LatLon) float64 {
@@ -110,7 +128,7 @@ func ProjectFromTrack(pos LatLon, heading float64, groundspeed int, fl int, vert
 	lat2 := math.Asin(math.Sin(lat1)*math.Cos(ang) + math.Cos(lat1)*math.Sin(ang)*math.Cos(brg))
 	lon2 := lon1 + math.Atan2(math.Sin(brg)*math.Sin(ang)*math.Cos(lat1),
 		math.Cos(ang)-math.Sin(lat1)*math.Sin(lat2))
-	out := LatLon{Lat: rad2deg(lat2), Lon: norm360(rad2deg(lon2))}
+	out := LatLon{Lat: rad2deg(lat2), Lon: normLon(rad2deg(lon2))}
 	// Vertical: 1 FL = 100 ft. verticalRate is ft/min. dtSec seconds ->
 	// dtMin minutes -> FL gained = verticalRate*dtMin/100.
 	dtMin := dtSec / 60.0
